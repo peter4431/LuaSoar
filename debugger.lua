@@ -2276,7 +2276,7 @@ local M = { }
 
 -- log system
 local LEVELS = { ERROR = 0, WARNING = 1, INFO = 2, DETAIL = 3, DEBUG = 4 }
-local LOG_LEVEL = LEVELS.DEBUG
+local LOG_LEVEL = LEVELS.WARNING
 
 -- Debugger features handling. Any feature can be get like any regular table, setting features result in
 -- error for unknown or read-only features.
