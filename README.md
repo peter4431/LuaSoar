@@ -1,4 +1,4 @@
-LuaSoar
-=======
+LuaSoar（Lua说)
+========
 
-A lua debugger
+sublime插件，用来调试quick-cocos2dx。
