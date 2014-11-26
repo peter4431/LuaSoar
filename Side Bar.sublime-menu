@@ -1,0 +1,9 @@
+[{ "caption": "-", "id": "luadbg" },
+{
+    "caption": "system_open",
+    "id": "system_open",
+    "command": "luadbg_system_open",
+    "args": {
+        "dirs": []
+    }
+}]

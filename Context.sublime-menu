@@ -1,0 +1,5 @@
+[
+    { "caption": "-", "id": "luadbg_start" },
+    { "command": "luadbg_focus_file", "caption": "定位到文件" },
+    { "caption": "-", "id": "luadbg_end" }
+]
