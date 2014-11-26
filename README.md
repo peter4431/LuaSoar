@@ -1,11 +1,10 @@
-# LuaSoar（Lua说)
-========
+# LuaSoar（Lua说）
 
-sublime插件，用来调试quick-cocos2dx。
+sublime插件，用来调试quick-cocos2dx的lua脚本。
 
 ## 环境: ##
-sublime 版本：sublime text 3
-测试环境：windows or Mac os
+* sublime 版本：sublime text 3
+* 测试环境：windows and Mac os
 
 ## 安装： ##
 
