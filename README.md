@@ -36,6 +36,7 @@ sublime插件，用来调试quick-cocos2dx的lua脚本。支持Android真机调�
 
 * 只接受一个调试客户端的连接
 * 如果发现连接不上，请按<kbd>f8</kbd>先
+* 调试时，断点只支持未编译过的lua，如果使用luac或者luajit编译过，不能断点。
 
 ## 自定义
 
