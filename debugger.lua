@@ -71,15 +71,18 @@
 --  Submodules body
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
--- dump = function (t) 
---   if type(t)=="string" then 
---     print(t) 
---   else
---     for k,v in pairs(t) do 
---       print(k,v) 
---     end 
---   end
--- end
+local android_source_patch = function(info_source)
+  if type(info_source) == "string" then
+    if string.sub(info_source,0,string.len("assets/")) == "assets/" then
+        info_source = string.sub(info_source,string.len("assets/")+1)
+    end
+  else
+    if string.sub(info_source.source,0,string.len("assets/")) == "assets/" then
+        info_source.source = string.sub(info_source.source,string.len("assets/")+1)
+    end
+  end
+  return info_source
+end
 
 --  Module debugger.transport.apr
 package.preload["debugger.transport.apr"] = function(...)
@@ -492,7 +495,7 @@ function M.eval(self, args, data)
 end
 
 function M.breakpoint_set(self, args, data)
-    print("breakpoint_set:",args.f)
+    log("DEBUG","breakpoint_set:",args.f)
     if args.o and not core.breakpoints.hit_conditions[args.o] then dbgp.error(200, "Invalid hit_condition operator: "..args.o) end
 
     local filename, lineno = args.f, tonumber(args.n)
@@ -514,7 +517,7 @@ function M.breakpoint_set(self, args, data)
     elseif args.t ~= "line" then dbgp.error(201, "BP type " .. args.t .. " not yet supported") end
 
     local bpid = core.breakpoints.insert(bp)
-    dbgp.send_xml(self.skt, { tag = "response", attr = { command = "breakpoint_set", transaction_id = args.i, state = bp.state, id = bpid ,filename=bp.filename} } )
+    dbgp.send_xml(self.skt, { tag = "response", attr = { command = "breakpoint_set", transaction_id = args.i, state = bp.state, id = bpid ,filename=bp.filename,line=lineno} } )
 end
 
 function M.breakpoint_get(self, args)
@@ -683,7 +686,7 @@ property_evaluation_environment.__index = property_evaluation_environment
 
 function M.property_get(self, args)
     --TODO BUG ECLIPSE TOOLSLINUX-99 352316
-    print("name:"..util.unb64(args.n))
+    log("DEBUG","name:"..util.unb64(args.n))
     local cxt_num, name = assert(util.unb64(args.n):match("^(%-?%d+)|(.*)$"))
     cxt_num = tonumber(args.c or cxt_num)
     local cxt_id = context.Context[cxt_num] or dbgp.error(302, "No such context: "..tostring(cxt_num))
@@ -2076,7 +2079,6 @@ end
 local function get_abs_file_uri (source)
     local uri
     -- if source:sub(1,1) == "@" then -- real source file
-      source = string.gsub(source,":","")
       if string.sub(source,-4) == ".lua" then
         local sourcepath = source--:sub(2)
         local normalizedpath = M.normalize(sourcepath)
@@ -2127,13 +2129,14 @@ function M.get_uri (source)
     -- search in cache
     local uri = uri_cache[source]
     if uri ~= nil then return uri end
+    tempsource = android_source_patch(source)
 
     -- not found, create uri
     if util.features.uri == "module" then
-        uri = get_module_uri(source)
-        if not uri then uri = get_abs_file_uri (source) end
+        uri = get_module_uri(tempsource)
+        if not uri then uri = get_abs_file_uri (tempsource) end
     else
-        uri =  get_abs_file_uri (source)
+        uri =  get_abs_file_uri (tempsource)
     end
 
     uri_cache[source] = uri
@@ -2158,7 +2161,6 @@ function M.get_path (uri)
 end
 
 function M.normalize(path)
-    print("normalize start:",path)
     local parts = { }
     for w in path:gmatch("[^/]+") do
         if     w == ".." and #parts ~=0 then table.remove(parts)
@@ -2166,7 +2168,6 @@ function M.normalize(path)
         end
     end
     local res = (path:sub(1,1) == "/" and "/" or "") .. table.concat(parts, "/")
-    print("normalize end:",res)
     return res
 end
 
@@ -2924,10 +2925,10 @@ do
     --- If breakpoint(s) exists for given file/line, uptates breakpoint counters
     -- and returns whether a breakpoint has matched (boolean)
     function core.breakpoints.at(file, line)
-        print("check breakpoint:",file,line)
+        log("DEBUG","check breakpoint:"..file..tostring(line))
         for k,v in pairs(file_mapping) do
           for kk,vv in pairs(v) do
-            print(k,kk)
+            log("DEBUG",k,kk)
           end
         end
         local bps = file_mapping[file] and file_mapping[file][line]
@@ -3102,7 +3103,6 @@ local function debugger_loop(self, async_packet)
         local func = commands[cmd]
         if func then
             local ok, cont = xpcall(function() return func(self, args, data) end, debug.traceback)
-            print("luadbg",ok, cont)
             if not ok then -- internal exception
                 local code, msg, attr
                 if type(cont) == "table" and getmetatable(cont) == dbgp.DBGP_ERR_METATABLE then
@@ -3128,7 +3128,6 @@ local function debugger_loop(self, async_packet)
     end
 
     self.stack = nil -- free allocated contexts
-    print("self.status:running")
     self.state = "running"
     self.skt:settimeout(0) -- reset socket to async
 end
@@ -3143,8 +3142,14 @@ end
 local function line_hook(line)
     local do_break, packet = nil, nil
     local info = active_session.coro:getinfo(0, "S")
+
     local uri = platform.get_uri(info.source)
-    print("enter file:",uri)
+    if type(info.source) == "string" then
+      log("DEBUG","enter source:"..info.source)
+    end
+    if type(uri) == "string" then
+      log("DEBUG","enter file:"..uri)
+    end
     if uri and uri ~= debugger_uri and uri ~= transportmodule_uri then -- the debugger does not break if the source is not known
         do_break = core.breakpoints.at(uri, line) or core.events.does_match()
         if do_break then
@@ -3166,7 +3171,6 @@ end
 
 local line_hook_coro = cocreate(function(line)
     while true do
-        print("suspend")
         line_hook(line)
         line = coyield()
     end
@@ -3211,7 +3215,6 @@ if rawget(_G, "jit") then
             if active_session.coro[1] == "main" then
                 line_hook(line)
             else
-                print("peter:not main")
                 -- run the debugger loop in another thread on the other cases (simplifies stack handling)
                 assert(coresume(line_hook_coro, line))
             end

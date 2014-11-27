@@ -6,14 +6,14 @@
         "children":
         [
             {
-                "caption": "Lua dbg",
+                "caption": "LuaSoar",
                 "mnemonic": "P",
-                "id": "lua dbg add search path",
+                "id": "LuaSoar add search path",
                 "children":
                 [
                     {
                         "caption": "Add source search path",
-						"command": "luadbg_add_search_path"
+						"command": "luaSoar_add_search_path"
                     }
                 ]
             }

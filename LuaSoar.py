@@ -1,5 +1,4 @@
 #coding:utf-8
-__author__ = 'yangwang'
 
 import platform
 import socket
@@ -81,7 +80,9 @@ class Contextview(object):
             fullname = self.getattribute(element,"fullname")
             res = {}
             res["fullname"] = name #表达式的fullname
-            res["value"] = base64.decodebytes(element.firstChild.data.encode()).decode()
+            valuebyte = base64.decodebytes(element.firstChild.data.encode())
+            res["value"] = self.pdecode(valuebyte)
+            
             res["name"] = name
             res["type"] = element.getAttribute("type")
             res["numchildren"] = res.get("numchildren") or element.getAttribute("numchildren") or 0
@@ -98,12 +99,21 @@ class Contextview(object):
         print("增加表达式:"+res["fullname"])
         self.addvalue(res)
 
+    def pdecode(self,mword):
+        try:
+            result = mword.decode()
+        except Exception as e:
+            result = str(mword)
+
+        return result
+
+
     #一个property
     def parseone(self,element):
         fullname = self.getattribute(element,"fullname")
         res = self.fullnamedict.get(fullname) or {}
         res["fullname"] = fullname
-        res["value"] = base64.decodebytes(element.firstChild.data.encode()).decode()
+        res["value"] = self.pdecode(base64.decodebytes(element.firstChild.data.encode()))
         res["name"] = res.get("name") or element.getAttribute("name")
         res["type"] = element.getAttribute("type")
         res["numchildren"] = res.get("numchildren") or element.getAttribute("numchildren") or 0
@@ -112,8 +122,9 @@ class Contextview(object):
         return res
 
     def getattribute(self,element,name):
-        return base64.decodebytes(element.getAttribute(name).encode()).decode()
+        return self.pdecode(base64.decodebytes(element.getAttribute(name).encode()))
 
+    #用来显示空table
     def getempty(self,level):
         res = {}
         res["lv"] = level
@@ -151,6 +162,7 @@ class Contextview(object):
                 mdict["childlist"][fullname] = mdata
                 self.fullnamedict[fullname] = mdata
 
+    #点击的行来获得fullname
     def getfullnamebyline(self,line):
         if line > len(self.linefullname.keys())-1:
             return
@@ -170,6 +182,7 @@ class Contextview(object):
         self.lineno = 0
         return self.getdictstr(self.datadict,keys)
 
+    #获得最终输出
     def getdictstr(self,mdict,keys=None):
         result = ""
         mkeys = list(mdict.keys())
@@ -187,6 +200,7 @@ class Contextview(object):
             if prop.get("childlist") and len(prop["childlist"].values()) > 0:
                 result += self.getdictstr(prop["childlist"])
         return result
+
 
 class MngContext(Contextview):
     '''
@@ -281,6 +295,7 @@ class DebugServer(object):
                 if str(e) == "timed out":
                     return
                 else:
+                    print(e)
                     print("客户端断开")
                     self.conn.close()
                     self.connected = False
@@ -288,14 +303,15 @@ class DebugServer(object):
                         self.closecallback()
                 return
 
-            if byte[0] == 0:
+            if len(byte) and byte[0] == 0:
                 break
             else:
-                res.append(byte[0])
+                if len(byte):
+                    res.append(byte[0])
         return res
 
     def senddata(self,command,transactionid=None,data=None):
-        print("send:"+command+str(data))
+        print("send:"+command+" data:"+str(data))
         if not self.conn:
             print("wainting for connect!")
             return
@@ -330,12 +346,12 @@ class DebugServer(object):
     def start(self):
         self.sock = socket.socket()
         try:
-            self.sock.bind(("", 10000))
+            self.sock.bind(("", 10240))
             self.sock.listen(5)
             self.sock.settimeout(1)
             self.listening = True
         except Exception as e:
-            print("bind:"+str(e))
+            sublime.error_message("检查端口是否被占用:"+str(e))
 
         while self.listening:
             try:
@@ -391,16 +407,28 @@ class MngView(object):
         "breakpoint":("Lua breakpoint",2,True)
         }
 
+    def save_all_file(self):
+        # window = sublime.active_window()
+        # views = window.views()
+        # for view in views:
+        #     if view.file_name():
+        #         view.save
+        sublime.run_command("save_all")
+
     def backup_layout(self):
         window = sublime.active_window()
         self.original_layout = window.get_layout()
+        print("original_layout:"+str(self.original_layout))
 
     def set_debug(self,mbool):
+        print("set_debug:"+str(mbool))
         window = sublime.active_window()
         if mbool:
             self.backup_layout()
+            print("set_layout:"+str(self.debug_layout))
             window.set_layout(self.debug_layout)
         else:
+            print("set_layout:"+str(self.original_layout))
             window.set_layout(self.original_layout)
 
     #清除所有调试信息
@@ -409,15 +437,30 @@ class MngView(object):
         self.add_debug_info("expression","")
         self.clear_current_line()
 
+    #@param file_name sublime得到的打开的文件地址
+    #@return 用来设置断点的uri
     def get_abs_uri(self,file_name):
         if not file_name:
             return ""
-        file_name = file_name.lower()
+        result = ""
         file_name = file_name.replace("\\","/")
-        return "file:///"+file_name
+        if sublime.platform() == "windows":
+            result = "file:///"+file_name.lower()
+        else:
+            result = "file://"+file_name
+        return result
 
+    #@parem file_name 从堆栈得到的文件信息
+    #@return 本地用来打开的文件地址
     def get_file_name(self,file_name):
-        return file_name[len("file:///"):]
+        if sublime.platform() == "windows":
+            if file_name.startswith("file:///"):
+                temp = file_name[len("file:///"):]
+            return temp
+        else:
+            if file_name.startswith("file:///"):
+                temp = file_name[len("file://"):]
+            return temp
 
     def show_breakpoint(self,view,breakpoints):
         self.clear_breakpoint(view)
@@ -446,6 +489,7 @@ class MngView(object):
 
     def show_current_file_line(self,file,line,isHightlight=False):
         file = self.get_file_name(file)
+        print("find file:"+file)
         line = int(line)
         window = sublime.active_window()
         findview = window.find_open_file(file)
@@ -457,7 +501,7 @@ class MngView(object):
                 findview = window.open_file(file)
                 isNew = True
             else:
-                print("文件不存在:"+str(file))
+                print("file not exists:"+str(file))
                 protocol.step_out()
                 return None,None
 
@@ -519,6 +563,9 @@ class MngView(object):
         fullname,group,readonly = self.debug_names[name]
         window = sublime.active_window()
 
+        if window.num_groups() != 3:
+            self.set_debug(True)
+
         for v in window.views():
             if v.name() == fullname:
                 view = v
@@ -531,7 +578,8 @@ class MngView(object):
             view.set_read_only(readonly)
             view.set_name(fullname)
             view.settings().set('word_wrap', False)
-            window.set_view_index(view, group, 0)
+            
+        window.set_view_index(view, group, 0)
             
         originaldata = view.substr(sublime.Region(0,view.size()))
         
@@ -542,7 +590,7 @@ class MngView(object):
             view.run_command("set_file_type",{'syntax': 'Packages/Lua/Lua.tmLanguage'})
             view.add_regions(self.table_key,view.find_all(r"table: 0x.*$"),"code","bookmark",sublime.HIDDEN)
         else:
-            print("和原始数据一样")
+            pass
 
         if focus:
             window.set_view_index(view, group, 0)
@@ -556,7 +604,6 @@ class MngBreakPoint(object):
     line_no = 0
 
     def __init__(self,addhandler=None,removehandler=None):
-        print("__init__")
         self.breakpoints = {}
         self.addhandler = addhandler
         self.removehandler = removehandler
@@ -568,12 +615,10 @@ class MngBreakPoint(object):
 
         fdict = self.breakpoints.get(file_name)
         if fdict.get(line_no) != None:
-            # print("取消行断点:"+str(line_no))
             del fdict[line_no]
             if self.removehandler:
                 self.removehandler(file_name,line_no)
         else:
-            # print("增加断点:"+str(type(line_no)))
             fdict[line_no] = {} #存放id，条件等
             if self.addhandler:
                 self.addhandler(file_name,line_no)
@@ -600,14 +645,9 @@ class MngBreakPoint(object):
         if not protocol:
             return
 
-        print("设置所有断点")
         for k,v in self.breakpoints.items():
             for kk,vv in v.items():
                 protocol.breakpoint_set(k,kk)
-                # cmd = "breakpoint_set -t line -f {0} -n {1}".format(k,kk+1)
-                # server.senddata(cmd)
-                # server.readdata()
-
 
 
 class Protocol(object):
@@ -635,6 +675,8 @@ class Protocol(object):
         self.doc = parseString(data)
         if self.doc.firstChild.localName == "init":
             self.on_init()
+        elif self.doc.firstChild.localName == "output":
+            print(self.doc.firstChild.getAttribute("mstr"))
         else:
             self.transaction_id = int(self.doc.firstChild.getAttribute("transaction_id"))
             self.command = self.doc.firstChild.getAttribute("command")
@@ -706,6 +748,7 @@ class Protocol(object):
         mng_view.add_debug_info("expression","")
         mng_view.add_debug_info("context","")
 
+        #连上调试客户端时会自动断在程序入口，执行step_over来和平时表现一样(无断点则通过，有断点进断点)
         self.step_over()
         self.isdebugging = True
 
@@ -718,19 +761,18 @@ class Protocol(object):
         mng_exp.refresheval()
 
     def on_property_context(self):
-        print("获得上下文property")
+        print("get context property")
         mng_context.parseproperty(self.doc)
 
         view = mng_view.find_debug_view("context")
         if not view:
             return
         layout = view.viewport_position()
-        print("上下文结果:"+mng_context.getstring())
         mng_view.add_debug_info("context",mng_context.getstring())
         view.set_viewport_position(layout,False)
 
     def on_property_eval(self):
-        print("获得表达式property")
+        print("get eval property")
         mng_exp.parseproperty(self.doc)
 
         view = mng_view.find_debug_view("expression")
@@ -781,10 +823,11 @@ last_select_time = 0
 searchpaths = []
 
 def init():
+    mng_view.backup_layout()
     global searchpaths
     settings = sublime.load_settings("luadbg.sublime-settings")
     searchpaths = settings.get("searchpaths") or []
-    print("搜索路径:"+str(searchpaths))
+    print("search path:"+str(searchpaths))
 
     mng_view.clear_debug()
     mng_view.add_debug_info("breakpoint","")
@@ -792,15 +835,22 @@ def init():
 def plugin_loaded():
     sublime.set_timeout(init, 200)
 
+process = None
 class LuadbgStartCommand(sublime_plugin.TextCommand):
 
     def run(self, edit):
         file_name = self.view.file_name()
         if not file_name or not file_name.endswith(".lua"):
-            print("Not .lua file!")
+            sublime.error_message("choose .lua file and then start!")
             return
 
-        index = file_name.rfind("\\src\\")
+        mng_view.save_all_file()
+
+        if sublime.platform() == "windows":
+            index = file_name.rfind("\\src\\")
+        else:
+            index = file_name.rfind("/src/")
+        
         workdir = file_name[0:index]
 
         def datahandler(data):
@@ -823,11 +873,81 @@ class LuadbgStartCommand(sublime_plugin.TextCommand):
             print("不需要创建serverThread")
 
         print("Luadbg:startdbg")
-        cmd = workdir+"/debug_win.bat"
 
-        def callback():
-            os.system(cmd)
-        Thread(target=callback).start()
+        global process
+
+        v3quick_root = os.getenv("QUICK_V3_ROOT")
+        # root
+        print("v3路径:"+v3quick_root)
+        if not v3quick_root:
+            return
+        # player path for platform
+        playerPath=""
+        if sublime.platform()=="osx":
+            v3quick_root = "/tools/quick-3.2rc1"
+            playerPath=v3quick_root+"/player3.app/Contents/MacOS/player3"
+        elif sublime.platform()=="windows":
+            playerPath=v3quick_root+"/quick/player/proj.win32/bin/player3.exe"
+        if playerPath=="" or not os.path.exists(playerPath):
+            sublime.error_message("player no exists")
+            return
+        # playerPath = "D:/cocosTool/quick-cocos2d-x-3.3rc0/player3.exe"
+        args=[playerPath]
+        args.append("-workdir")
+        args.append(workdir)
+        #args.append("-debugger-ldt")
+        args.append("-landscape")
+
+        if process:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        if sublime.platform()=="osx":
+            print("参数:"+str(args))
+            process=subprocess.Popen(args)
+        elif sublime.platform()=="windows":
+            process=subprocess.Popen(args)
+
+class LuadbgStartAndroidCommand(sublime_plugin.TextCommand):
+
+    def run(self, edit):
+        file_name = self.view.file_name()
+        if not file_name or not file_name.endswith(".lua"):
+            sublime.error_message("choose .lua file and then start!")
+            return
+
+        mng_view.save_all_file()
+
+        if sublime.platform() == "windows":
+            index = file_name.rfind("\\src\\")
+        else:
+            index = file_name.rfind("/src/")
+        
+        workdir = file_name[0:index]
+
+        def datahandler(data):
+            protocol.datahandler(data)
+
+        #因为调试客户端关闭，终止调试
+        def closecallback():
+            mng_view.clear_current_line()
+            mng_view.clear_debug()
+        
+        global protocol
+        if not protocol:
+            serverThread = ServerThread(datahandler,closecallback)
+            serverThread.setDaemon(True)
+            serverThread.start()
+            server = serverThread.server
+            protocol = Protocol(server)
+            print("创建serverThread")
+        else:
+            print("不需要创建serverThread")
+
+        print("Luadbg:startdbg")
+
+        #TODO compile lua scripts and push to android
 
 class LuadbgBreakpointCommand(sublime_plugin.TextCommand):
     '''
@@ -839,7 +959,6 @@ class LuadbgBreakpointCommand(sublime_plugin.TextCommand):
             return
         sel = self.view.sel()
         line_no = self.view.rowcol(sel[0].a)[0]
-        print("设置断点"+str(line_no))
         mng_breakpoints.switch(file_name,line_no+1)
         mng_view.show_breakpoint(self.view,mng_breakpoints.breakpoints)
         mng_view.add_debug_info("breakpoint",mng_breakpoints.getstring())
@@ -867,18 +986,18 @@ class LuadbgFocusFileCommand(sublime_plugin.TextCommand):
             if mfileline:
                 mng_view.show_current_file_line(*mfileline)
 
+    def is_visible(self):
+        return self.view.name() == "Lua breakpoint"
+
 class LuadbgAddSearchPathCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         def ondone(mstr):
             settings = sublime.load_settings("luadbg.sublime-settings")
             global searchpaths
-            print("添加之前:"+str(searchpaths))
             if searchpaths.count(mstr) == 0:
                 searchpaths.append(mstr)
-            print("添加之后:"+str(searchpaths))
             settings.set("searchpaths",searchpaths)
             sublime.save_settings("luadbg.sublime-settings")
-            print("保存搜索路径")
             
         def onchange(mstr):
             pass
@@ -892,12 +1011,6 @@ class LuadbgAddSearchPathCommand(sublime_plugin.TextCommand):
 class EventListener(sublime_plugin.EventListener):
     mfile = None
     def output(self,mstr,*mlist):
-        # if not self.mfile:
-        #     mfile = open("c:/log.txt","a")
-
-        # res = mstr+":{0}".format(str(mlist))
-        # mfile.write(res)
-        # print(mstr+str(mlist))
         pass
 
     def on_new(self, view):
@@ -947,13 +1060,12 @@ class EventListener(sublime_plugin.EventListener):
 
         global last_select_time
         if view.name() == "Lua Context":
-            print("点击上下文")
             if not protocol or not protocol.server:
-                print("没服务器")
+                print("not server")
                 return
 
             if time.time()-(last_select_time or 0) <= 0.1:
-                print("没到时间")
+                print("time too close")
                 return
 
             last_select_time = time.time()
@@ -973,7 +1085,6 @@ class EventListener(sublime_plugin.EventListener):
                 protocol.property_get_context(base64.encodebytes(fullname.encode()).decode())
             
         elif view.name() == "Lua expression":
-            print("点击表达式")
             if not protocol or not protocol.server:
                 return
 
