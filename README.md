@@ -10,13 +10,14 @@ sublime插件，用来调试quick-cocos2dx的lua脚本。支持Android真机调�
 
 ## 安装：
 
-###1 下载安装
+###方法一 通过package control安装
+参考[这里](http://code-tech.diandian.com/post/2012-11-10/40041273125)
+
+###方法二 下载安装
 * 下载LuaSoar
 * 点击sublime text3 浏览插件包；![luaSoarinstall1][luaSoarinstall1]
 * 放置插件到这个目录即可。![luaSoarinstall2][luaSoarinstall2]
 
-###2 通过package control安装
-参考[这里](http://code-tech.diandian.com/post/2012-11-10/40041273125)
 ## 使用：
 ![luaSoar use][LuaSoaruse]
 
@@ -35,6 +36,7 @@ sublime插件，用来调试quick-cocos2dx的lua脚本。支持Android真机调�
 
 * 只接受一个调试客户端的连接
 * 如果发现连接不上，请按<kbd>f8</kbd>先
+
 ## 自定义
 
 修改快捷键请编辑插件目录下的文件:
