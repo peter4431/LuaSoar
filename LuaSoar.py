@@ -49,6 +49,8 @@ class Contextview(object):
         except:
             return
 
+        self.clear()
+
         firstchild = doc.firstChild
         childnodes = firstchild.childNodes
 
@@ -224,8 +226,10 @@ class MngExp(Contextview):
     def getallexp(self):
         view = mng_view.find_debug_view("expression")
         if not view:
+            print("没有表达式view")
             return
         allstr = view.substr(sublime.Region(0,view.size()))
+        print("获得表达式字符串")
         lines = allstr.split("\n")
 
         self.expressions.clear()
@@ -353,14 +357,15 @@ class DebugServer(object):
         except Exception as e:
             sublime.error_message("检查端口是否被占用:"+str(e))
 
-        while self.listening:
+        while self.listening: 
             try:
                 self.conn, addr = self.sock.accept()
                 if self.conn:
                     self.connected = True
+                    self.conn.settimeout(1)
                     print("client connected!")
             except Exception as e:
-                pass
+                pass  
 
             while self.connected:
                 mstr = self.read()
@@ -368,7 +373,11 @@ class DebugServer(object):
                     if self.datahandler:
                         self.datahandler(mstr)
 
+            if not protocol or not protocol.server:
+                self.close()
+
     def close(self):
+        print("关闭连接")
         self.conn.close()
         self.sock.close()
         self.clear()
@@ -434,7 +443,7 @@ class MngView(object):
     #清除所有调试信息
     def clear_debug(self):
         self.add_debug_info("context","")
-        self.add_debug_info("expression","")
+        # self.add_debug_info("expression","")
         self.clear_current_line()
 
     #@param file_name sublime得到的打开的文件地址
@@ -493,6 +502,8 @@ class MngView(object):
         line = int(line)
         window = sublime.active_window()
         findview = window.find_open_file(file)
+        #TODO::for test
+        self.searchfile(file)
         isNew = False
         if not findview:
             if not os.path.exists(file):
@@ -519,7 +530,9 @@ class MngView(object):
             focusfile()
 
     def searchfile(self,file):
-        subpath = file[file.rfind("/src/")+len("/src/"):]
+        #subpath = file[file.rfind("/src/")+len("/src/"):]
+        subpath = getsubdir(file)
+        print("subpath:"+subpath)
         temppath = None
         global searchpaths
         for path in searchpaths:
@@ -609,15 +622,17 @@ class MngBreakPoint(object):
         self.removehandler = removehandler
 
     def switch(self,file_name,line_no):
+        line_no = int(line_no)
         print("switchbreakpoint:{file_name}:{line_no}".format(**locals()))
         if not self.breakpoints.get(file_name):
             self.breakpoints[file_name] = {}
 
         fdict = self.breakpoints.get(file_name)
         if fdict.get(line_no) != None:
-            del fdict[line_no]
             if self.removehandler:
                 self.removehandler(file_name,line_no)
+            if fdict.get(line_no):
+                del fdict[line_no]
         else:
             fdict[line_no] = {} #存放id，条件等
             if self.addhandler:
@@ -629,7 +644,8 @@ class MngBreakPoint(object):
         self.line_no = 0
         for file,value in self.breakpoints.items():
             for lineno in value.keys():
-                result += "{0:>4}:{1}\n".format(lineno,file[file.rfind("/src/")+len("/src/"):])
+                subpath = getsubdir(file)
+                result += "{0:>4}:{1}\n".format(lineno,subpath)
                 self.linedict[self.line_no] = (file,lineno)
                 self.line_no += 1
 
@@ -637,9 +653,27 @@ class MngBreakPoint(object):
 
     #输出字符串的某一行是哪个文件哪一行
     def getfileinfo(self,line):
+        line = int(line)
         print(self.linedict)
         if self.linedict.get(line):
             return self.linedict[line]
+
+    def setinfo(self,id,filename,lineno):
+        lineno = int(lineno)
+        filedict = self.breakpoints.get(filename)
+        if filedict != None:
+            linedict = filedict.get(lineno)
+            if linedict != None:
+                linedict["id"] = int(id)
+
+    def getid(self,filename,lineno):
+        lineno = int(lineno)
+        print(self.breakpoints)
+        filedict = self.breakpoints.get(filename)
+        if filedict:
+            linedict = filedict.get(lineno)
+            if linedict:
+                return linedict.get("id")
 
     def setall(self):
         if not protocol:
@@ -659,7 +693,7 @@ class Protocol(object):
     isdebugging = False
     lastfileinfo = None
 
-    # commands = {"breakpoint_set","step_into","step_over","step_out","run","context_get","property_get","stack_get","stack_depth","eval"}
+    # commands = {"breakpoint_set","breakpoint_remove",step_into","step_over","step_out","run","context_get","property_get","stack_get","stack_depth","eval"}
 
     def __init__(self,server):
         self.server = server
@@ -669,6 +703,10 @@ class Protocol(object):
 
     def reset(self):
         self.isdebugging = False
+
+    def setdebugstatus(self,mstr):
+        mstr = mstr or ""
+        sublime.active_window().active_view().set_status("status","调试状态:"+mstr)
 
     def datahandler(self,data):
         print(data)
@@ -681,7 +719,7 @@ class Protocol(object):
             self.transaction_id = int(self.doc.firstChild.getAttribute("transaction_id"))
             self.command = self.doc.firstChild.getAttribute("command")
 
-            print("status:"+self.status)
+            self.setdebugstatus(self.status)
 
             if self.command == "step_into" or \
                 self.command == "step_over" or \
@@ -702,26 +740,30 @@ class Protocol(object):
     def breakpoint_set(self,file,line):
         self.server.senddata("breakpoint_set -t line -f {file} -n {line}".format(**locals()))
 
-    def breakpoint_remove(self,file,line):
-        self.server.senddata("breakpoint_set -t line -f {file} -n {line}".format(**locals()))
+    def breakpoint_remove(self,id):
+        self.server.senddata("breakpoint_remove -d {id}".format(**locals()))
 
     def step_into(self):
         self.status = "running"
+        self.setdebugstatus(self.status)
         mng_view.clear_debug()
         self.server.senddata("step_into")
 
     def step_over(self):
         self.status = "running"
+        self.setdebugstatus(self.status)
         mng_view.clear_debug()
         self.server.senddata("step_over")
 
     def step_out(self):
         self.status = "running"
+        self.setdebugstatus(self.status)
         mng_view.clear_debug()
         self.server.senddata("step_out")
 
     def run(self):
         self.status = "running"
+        self.setdebugstatus(self.status)
         mng_view.clear_debug()
         self.server.senddata("run")
 
@@ -753,7 +795,11 @@ class Protocol(object):
         self.isdebugging = True
 
     def on_breakpoint_set(self):
-        pass
+        filename = self.doc.firstChild.getAttribute("filename")
+        lineno = self.doc.firstChild.getAttribute("line")
+        id = self.doc.firstChild.getAttribute("id")
+        print(mng_breakpoints.breakpoints)
+        mng_breakpoints.setinfo(id,filename,lineno)
 
     def on_continue(self):
         self.stack_get()
@@ -807,8 +853,14 @@ def addbreakpoint(file,line):
     if protocol:
         protocol.breakpoint_set(file,line)
 
+def removebreakpoint(file_name,line):
+    if protocol:
+        id = mng_breakpoints.getid(file_name,line)
+        if id != None:
+            protocol.breakpoint_remove(id)
+
 #断点管理
-mng_breakpoints = MngBreakPoint(addbreakpoint)
+mng_breakpoints = MngBreakPoint(addbreakpoint,removebreakpoint)
 #视图管理
 mng_view = MngView()
 #上下文管理器
@@ -821,6 +873,8 @@ protocol = None
 last_select_time = 0
 
 searchpaths = []
+
+
 
 def init():
     mng_view.backup_layout()
@@ -835,6 +889,31 @@ def init():
 def plugin_loaded():
     sublime.set_timeout(init, 200)
 
+def parsepath(mpath):
+    mpath = mpath.replace("\\","/")
+    indexsrc = mpath.rfind("/src/")
+    indexscripts = mpath.rfind("/scripts/")
+
+    print(indexsrc,indexscripts)
+
+    if indexsrc == -1 and indexscripts ==-1:
+        return os.path.dirname(result),os.path.basename(result)
+    else:
+        if indexsrc > indexscripts:
+            return mpath[0:indexsrc],mpath[indexsrc+len("/src/"):],"/src/"
+        else:
+            print(mpath[0:indexscripts])
+            print(mpath[indexscripts+len("/scripts/"):])
+            return mpath[0:indexscripts],mpath[indexscripts+len("/scripts/"):],"/scripts/"
+
+def getsubdir(mpath):
+    _,sub,_ = parsepath(mpath)
+    return sub
+
+def getworkdir(mpath):
+    workdir,_,_ = parsepath(mpath)
+    return workdir
+
 process = None
 class LuadbgStartCommand(sublime_plugin.TextCommand):
 
@@ -846,12 +925,7 @@ class LuadbgStartCommand(sublime_plugin.TextCommand):
 
         mng_view.save_all_file()
 
-        if sublime.platform() == "windows":
-            index = file_name.rfind("\\src\\")
-        else:
-            index = file_name.rfind("/src/")
-        
-        workdir = file_name[0:index]
+        workdir = getworkdir(file_name)
 
         def datahandler(data):
             protocol.datahandler(data)
@@ -875,38 +949,19 @@ class LuadbgStartCommand(sublime_plugin.TextCommand):
         print("Luadbg:startdbg")
 
         global process
-
-        v3quick_root = os.getenv("QUICK_V3_ROOT")
-        # root
-        print("v3路径:"+v3quick_root)
-        if not v3quick_root:
-            return
-        # player path for platform
-        playerPath=""
-        if sublime.platform()=="osx":
-            v3quick_root = "/tools/quick-3.2rc1"
-            playerPath=v3quick_root+"/player3.app/Contents/MacOS/player3"
-        elif sublime.platform()=="windows":
-            playerPath=v3quick_root+"/quick/player/proj.win32/bin/player3.exe"
-        if playerPath=="" or not os.path.exists(playerPath):
-            sublime.error_message("player no exists")
-            return
-        # playerPath = "D:/cocosTool/quick-cocos2d-x-3.3rc0/player3.exe"
-        args=[playerPath]
-        args.append("-workdir")
-        args.append(workdir)
-        #args.append("-debugger-ldt")
-        args.append("-landscape")
-
+        args = []
         if process:
             try:
                 process.terminate()
             except Exception:
                 pass
         if sublime.platform()=="osx":
-            print("参数:"+str(args))
+            args = [workdir+"/launcher.sh"]
+            print(args)
             process=subprocess.Popen(args)
         elif sublime.platform()=="windows":
+            args = [workdir+"/launcher.bat"]
+            print(args)
             process=subprocess.Popen(args)
 
 class LuadbgStartAndroidCommand(sublime_plugin.TextCommand):
