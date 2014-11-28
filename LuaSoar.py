@@ -49,6 +49,8 @@ class Contextview(object):
         except:
             return
 
+        self.clear()
+
         firstchild = doc.firstChild
         childnodes = firstchild.childNodes
 
@@ -629,7 +631,10 @@ class MngBreakPoint(object):
         self.line_no = 0
         for file,value in self.breakpoints.items():
             for lineno in value.keys():
-                result += "{0:>4}:{1}\n".format(lineno,file[file.rfind("/src/")+len("/src/"):])
+                if file.count("/src"):
+                    result += "{0:>4}:{1}\n".format(lineno,file[file.rfind("/src/")+len("/src/"):])
+                elif file.count("/scripts/"):
+                    result += "{0:>4}:{1}\n".format(lineno,file[file.rfind("/scripts/")+len("/scripts/"):])
                 self.linedict[self.line_no] = (file,lineno)
                 self.line_no += 1
 
