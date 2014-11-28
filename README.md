@@ -2,6 +2,11 @@
 
 sublime插件，用来调试quick-cocos2dx的lua脚本。支持Android真机调试
 
+启动方式修改：
+
+因为quick版本太多，启动方式太多，所以把启动单独成一个脚本，复制到项目路径下就可以，暂时有quick2和quick3两个版本。
+
+
 <font color="red">调试原理：</font>
 
 * <font color="red">lua本身有一个库叫做debug，可以获得当前运行的代码信息，如上下文，堆栈，执行表达式。</font>
@@ -56,6 +61,14 @@ function __G__TRACKBACK__(errorMessage)
 end
 require("app.MyApp").new():run()
 </pre>
+
+总结一下步骤：
+
+* 复制debugger.lua到src目录，quick2.x.x是script目录
+* 在main.lua中添加调试入口，见上文的文件。
+* 复制对应的launcher.bat到工程目录，和src目录同级，windows下双击应该能够打开模拟器。（可以不做，不做需要手动启动模拟器）
+
+快捷键：
 
 * <kbd>f2</kbd> 添加断点
 * <kbd>f5</kbd> step into
