@@ -6,7 +6,7 @@ sublime插件，用来调试quick-cocos2dx的lua脚本。支持Android真机调�
 
 因为quick版本太多，启动方式太多，所以把启动单独成一个脚本，复制到项目路径下就可以，暂时有quick2和quick3两个版本。
 
-
+实现原理请查看 [15 行代码 Lua 调试原理][15line] 和 [自定义sublime插件][sublimeplugin]
 <font color="red">调试原理：</font>
 
 * <font color="red">lua本身有一个库叫做debug，可以获得当前运行的代码信息，如上下文，堆栈，执行表达式。</font>
@@ -100,6 +100,8 @@ require("app.MyApp").new():run()
 ## 最后
 欢迎拍砖
 
+[15line]: https://github.com/peter4431/doc/blob/master/15_line_lua_debug.md
+[sublimeplugin]: https://github.com/peter4431/doc/blob/master/sublime_plugin.md
 [LuaSoarlooklike]:      https://raw.githubusercontent.com/peter4431/LuaSoar/master/screenshots/light.png
 [LuaSoaruse]:			https://raw.githubusercontent.com/peter4431/LuaSoar/master/screenshots/use.png
 [luaSoarinstall1]:		https://raw.githubusercontent.com/peter4431/LuaSoar/master/screenshots/install1.png
